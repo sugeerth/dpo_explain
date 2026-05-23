@@ -1,0 +1,6 @@
+{
+  "_note": "Populated by evaluate.py after training. Expected shape:",
+  "n": 200,
+  "mean_margin": 0.0,
+  "preference_accuracy": 0.5
+}

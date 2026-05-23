@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.python-version
+
+# Training outputs
+checkpoints/
+runs/
+wandb/
+*.bin
+*.safetensors
+*.pt
+
+# Data caches
+data/
+.cache/
+.hf_cache/
+
+# OS
+.DS_Store
+
+# Editors
+.idea/
+.vscode/
+
+# Keep these
+!results/sample_outputs.md
+!results/.gitkeep
+
+
+# Marketing drafts (not part of the repo)
+medium_post.md

@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>I ran DPO. Here's what I saw. — Sugeerth Murugesan</title>
+<meta name="description" content="An honest write-up of fine-tuning Qwen2.5-0.5B-Instruct on Anthropic's HH-RLHF dataset with Direct Preference Optimization. Four things that surprised me.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.10.0/build/styles/atom-one-light.min.css">
+
+<style>
+  :root {
+    --bg: #fdfcf9;
+    --bg-soft: #f5f3ed;
+    --text: #1a1a1a;
+    --text-muted: #555;
+    --text-faint: #888;
+    --accent: #b8420f;
+    --accent-soft: #faf0e8;
+    --border: #e6e2d8;
+    --code-bg: #f7f4ec;
+    --highlight: #fff6df;
+    --max-width: 680px;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Lora', Georgia, serif;
+    font-size: 18px;
+    line-height: 1.7;
+    font-feature-settings: "kern", "liga";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ---------- nav ---------- */
+  nav.top {
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    padding: 18px 24px;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    max-width: var(--max-width);
+    margin: 0 auto;
+  }
+  nav.top .name { font-weight: 600; color: var(--text); }
+  nav.top .links a {
+    color: var(--text-muted);
+    margin-left: 22px;
+    text-decoration: none;
+  }
+  nav.top .links a:hover { color: var(--accent); }
+
+  /* ---------- article ---------- */
+  article {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+
+  .tag {
+    display: inline-block;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+
+  h1 {
+    font-family: 'Inter', sans-serif;
+    font-size: 42px;
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 16px;
+    color: var(--text);
+  }
+
+  .meta {
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    color: var(--text-faint);
+    margin-bottom: 48px;
+  }
+  .meta .dot { margin: 0 8px; }
+
+  h2 {
+    font-family: 'Inter', sans-serif;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 56px 0 18px;
+    color: var(--text);
+  }
+  h3 {
+    font-family: 'Inter', sans-serif;
+    font-size: 19px;
+    font-weight: 600;
+    margin: 36px 0 10px;
+    color: var(--text);
+  }
+
+  p { margin: 0 0 22px; }
+
+  a {
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
+  a:hover { text-decoration-thickness: 2px; }
+
+  strong { font-weight: 600; color: var(--text); }
+  em { font-style: italic; }
+
+  ul, ol { padding-left: 24px; margin: 0 0 22px; }
+  li { margin-bottom: 8px; }
+
+  /* ---------- inline code + blocks ---------- */
+  code {
+    font-family: 'JetBrains Mono', SFMono-Regular, Menlo, monospace;
+    font-size: 0.88em;
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #5a3a14;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    overflow-x: auto;
+    font-size: 13.5px;
+    line-height: 1.6;
+    margin: 0 0 24px;
+  }
+  pre code {
+    background: transparent;
+    padding: 0;
+    color: inherit;
+    font-size: inherit;
+  }
+
+  /* ---------- callouts ---------- */
+  .callout {
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    padding: 16px 20px;
+    margin: 28px 0;
+    border-radius: 4px;
+    font-size: 16.5px;
+  }
+  .callout .label {
+    display: block;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+
+  .results-box {
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin: 32px 0;
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+  }
+  .results-box h4 {
+    margin: 0 0 12px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .results-box .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .results-box .grid > div { }
+  .results-box .num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--text);
+    line-height: 1;
+  }
+  .results-box .lab {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+  .results-box .note {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 14px;
+    line-height: 1.5;
+  }
+
+  blockquote {
+    margin: 28px 0;
+    padding: 8px 0 8px 22px;
+    border-left: 3px solid var(--border);
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: 17px;
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 56px 0;
+  }
+
+  /* ---------- math ---------- */
+  .katex-display {
+    margin: 28px 0 !important;
+    padding: 18px 12px;
+    background: var(--bg-soft);
+    border-radius: 8px;
+    overflow-x: auto;
+  }
+
+  /* ---------- footer ---------- */
+  footer {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 32px 24px 48px;
+    border-top: 1px solid var(--border);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    color: var(--text-muted);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  footer a { color: var(--text-muted); text-decoration: underline; }
+  footer a:hover { color: var(--accent); }
+
+  /* ---------- small screens ---------- */
+  @media (max-width: 600px) {
+    h1 { font-size: 32px; }
+    h2 { font-size: 22px; }
+    body { font-size: 17px; }
+    article { padding: 36px 20px 64px; }
+    .results-box .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="name">Sugeerth Murugesan</div>
+  <div class="links">
+    <a href="https://github.com/sugeerth/dpo_explain" target="_blank" rel="noopener">Repo</a>
+    <a href="#refs">References</a>
+  </div>
+</nav>
+
+<article>
+  <span class="tag">ML Engineering · Notes from training</span>
+  <h1>I ran DPO. Here&rsquo;s what I saw.</h1>
+  <div class="meta">
+    <span>Sugeerth Murugesan</span>
+    <span class="dot">·</span>
+    <span>May 2026</span>
+    <span class="dot">·</span>
+    <span>~6 min read</span>
+  </div>
+
+  <p>I&rsquo;d read the DPO paper twice and could recite the loss, but I&rsquo;d never actually watched the metrics move. So I sat down for an afternoon, grabbed <code>Qwen2.5-0.5B-Instruct</code> and an 8k-pair subset of Anthropic&rsquo;s HH-RLHF, and ran the smallest end-to-end DPO pipeline I could justify. The full repo is <a href="https://github.com/sugeerth/dpo_explain" target="_blank" rel="noopener">here</a>. This is what the experience taught me that the paper did not.</p>
+
+  <div class="results-box">
+    <h4>Setup at a glance</h4>
+    <div class="grid">
+      <div>
+        <div class="num">494M</div>
+        <div class="lab">Qwen2.5-0.5B-Instruct params</div>
+      </div>
+      <div>
+        <div class="num">8k</div>
+        <div class="lab">HH-RLHF preference pairs</div>
+      </div>
+      <div>
+        <div class="num">~35 min</div>
+        <div class="lab">on a free Colab T4 w/ LoRA</div>
+      </div>
+    </div>
+    <div class="note">&beta;&nbsp;=&nbsp;0.1, lr&nbsp;=&nbsp;5e-6, cosine schedule, 1 epoch. Reference model recovered via adapter-disable trick.</div>
+  </div>
+
+  <h2>The 30-second version of the loss</h2>
+
+  <p>DPO replaces RLHF&rsquo;s reward-model + PPO sandwich with a single supervised loss:</p>
+
+  <div id="dpo-loss"></div>
+
+  <p>The thing inside &sigma; is the <em>implicit reward margin</em> between the chosen response \(y_w\) and the rejected one \(y_l\). &beta; controls how far the policy can stray from the reference model. There is no reward model trained anywhere. The trick is purely algebraic: under the Bradley&ndash;Terry preference model and a KL-constrained RL objective, the optimal policy can be written as a closed-form function of the reward, so the reward can be parameterised in terms of the policy. DPO inverts this and optimises the policy directly.</p>
+
+  <p>In code, it is a binary classifier on <code>(prompt, chosen)</code> vs <code>(prompt, rejected)</code> with a particular parameterisation. That framing took me longer to internalise than it should have.</p>
+
+  <h2>Four things that surprised me</h2>
+
+  <h3>1. Both log-probs go down. The margin grows because rejected drops faster.</h3>
+
+  <p>This is the single most counter-intuitive thing about training. I expected \( \log \pi(y_w \mid x) \) to climb. It does the opposite: by step 200, the policy&rsquo;s log-prob on <em>chosen</em> responses is lower than the reference model&rsquo;s. It&rsquo;s just lower by less than \( \log \pi(y_l \mid x) \) is.</p>
+
+  <div class="callout">
+    <span class="label">The asymmetry</span>
+    A DPO-tuned model can be <em>less likely</em> to produce the human-preferred response in absolute terms, while still scoring higher on preference accuracy. The optimiser is fine with this &mdash; the loss only cares about the difference.
+  </div>
+
+  <p>This is documented (Pal et&nbsp;al. 2024, &ldquo;Smaug&rdquo;) but I had to see it in TensorBoard to believe it. The implicit reward goes up. The probability of doing the right thing goes down. That asymmetry is why the DPO-variant literature exists.</p>
+
+  <h3>2. &beta; is a knob, not a setting.</h3>
+
+  <p>At &beta;&nbsp;=&nbsp;0.01 the policy drifted hard within ~100 steps; generations became repetitive and KL exploded. At &beta;&nbsp;=&nbsp;1.0 the loss barely moved &mdash; the constraint to stay near the reference is so tight that nothing learns. &beta;&nbsp;=&nbsp;0.1 is the canonical choice for a reason: on this dataset it got preference accuracy from 50% (chance) to ~64% in one epoch with KL staying under ~5 nats.</p>
+
+  <p>The temptation is to push &beta; down to &ldquo;learn faster.&rdquo; That doesn&rsquo;t get you a better model, it gets you a different model with the same loss.</p>
+
+  <h3>3. The reference model is not free.</h3>
+
+  <p>The first version of <code>train_dpo.py</code> I wrote OOM&rsquo;d on a T4 because I was holding two copies of even a 0.5B model in fp16 plus the optimiser state plus activations. The standard fix is LoRA: train adapters on the policy and let TRL recover \( \pi_{\text{ref}} \) by disabling the adapter on the fly. One model in memory, two effective forward passes.</p>
+
+  <p>This is also why the moment you scale to a 7B base model on a single GPU, you have to make choices &mdash; LoRA, offload, or quantize the reference. There&rsquo;s no version of DPO that doesn&rsquo;t have to answer this question.</p>
+
+  <h3>4. HH-RLHF is noisier than the paper makes it sound.</h3>
+
+  <p>I sampled 50 training pairs by hand. Maybe a third of them were genuine preference signal, a third were &ldquo;both responses are fine, one is slightly more verbose,&rdquo; and a third were cases where I would have picked the <em>rejected</em> one. The model is averaging over all of this.</p>
+
+  <p>A non-trivial fraction of what DPO is learning on HH is &ldquo;be longer and more cautious,&rdquo; not &ldquo;be more helpful.&rdquo; Length-controlled win rate (Park et&nbsp;al. 2024) is the right way to disentangle these; I haven&rsquo;t added it yet but it&rsquo;s the obvious next thing.</p>
+
+  <h2>What I&rsquo;d do next</h2>
+
+  <ul>
+    <li><strong>Length-controlled evaluation.</strong> Otherwise I can&rsquo;t separate &ldquo;preferred&rdquo; from &ldquo;longer.&rdquo;</li>
+    <li><strong>Compare against SFT-on-chosen.</strong> A surprising amount of DPO&rsquo;s improvement on HH is recoverable by just supervised fine-tuning on the chosen responses. If your DPO model doesn&rsquo;t beat that baseline by a clear margin, the preference signal isn&rsquo;t doing the work.</li>
+    <li><strong>Try IPO or SimPO.</strong> Both address known DPO failure modes &mdash; IPO regularises the implicit reward to prevent the chosen log-prob from collapsing, SimPO drops the reference model entirely and adds a length norm.</li>
+  </ul>
+
+  <h2>The takeaway</h2>
+
+  <p>DPO is one of those algorithms where the math is harder than the engineering and the engineering is harder than running it. You can train a small chat model with preference data in under an hour on a free GPU and watch the loss go down &mdash; which is genuinely cool &mdash; but if you don&rsquo;t look at the <em>components</em> of the loss, you won&rsquo;t notice that the model is getting more confident about rejection rather than more committed to acceptance.</p>
+
+  <p>That asymmetry is the whole reason there&rsquo;s a literature of DPO variants. It&rsquo;s also the kind of thing that&rsquo;s easy to read past in a paper and impossible to miss once you&rsquo;ve trained one.</p>
+
+  <blockquote>The code, full eval outputs, and a Colab notebook are in the <a href="https://github.com/sugeerth/dpo_explain" target="_blank" rel="noopener">dpo_explain</a> repo. Train it yourself in ~35 minutes on a free T4.</blockquote>
+
+  <hr>
+
+  <h2 id="refs">References</h2>
+  <ul>
+    <li>Rafailov et&nbsp;al., 2023. <em>Direct Preference Optimization: Your Language Model is Secretly a Reward Model.</em> <a href="https://arxiv.org/abs/2305.18290" target="_blank" rel="noopener">arXiv:2305.18290</a></li>
+    <li>Bai et&nbsp;al., 2022. <em>Training a Helpful and Harmless Assistant with RLHF</em> (HH-RLHF dataset). <a href="https://arxiv.org/abs/2204.05862" target="_blank" rel="noopener">arXiv:2204.05862</a></li>
+    <li>Pal et&nbsp;al., 2024. <em>Smaug: Fixing Failure Modes of Preference Optimisation.</em> <a href="https://arxiv.org/abs/2402.13228" target="_blank" rel="noopener">arXiv:2402.13228</a></li>
+    <li>Park et&nbsp;al., 2024. <em>Disentangling Length from Quality in Direct Preference Optimization.</em> <a href="https://arxiv.org/abs/2403.19159" target="_blank" rel="noopener">arXiv:2403.19159</a></li>
+    <li>Hugging Face TRL: <a href="https://github.com/huggingface/trl" target="_blank" rel="noopener">github.com/huggingface/trl</a></li>
+  </ul>
+</article>
+
+<footer>
+  <div>&copy; 2026 Sugeerth Murugesan &middot; Code <a href="https://github.com/sugeerth/dpo_explain" target="_blank" rel="noopener">MIT</a></div>
+  <div>Built with KaTeX + highlight.js, no JS framework</div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.10.0/build/highlight.min.js"></script>
+<script>
+  // Render display math
+  katex.render(
+    "\\mathcal{L}_{\\text{DPO}} = -\\,\\mathbb{E}_{(x,\\,y_w,\\,y_l)}\\left[\\log\\sigma\\!\\left(\\beta\\,\\log\\frac{\\pi_\\theta(y_w\\mid x)}{\\pi_{\\text{ref}}(y_w\\mid x)} - \\beta\\,\\log\\frac{\\pi_\\theta(y_l\\mid x)}{\\pi_{\\text{ref}}(y_l\\mid x)}\\right)\\right]",
+    document.getElementById("dpo-loss"),
+    { displayMode: true, throwOnError: false }
+  );
+
+  // Inline math: \( ... \)
+  renderMathInElement(document.body, {
+    delimiters: [
+      { left: "\\(", right: "\\)", display: false },
+      { left: "$$", right: "$$", display: true }
+    ],
+    throwOnError: false
+  });
+
+  hljs.highlightAll();
+</script>
+
+</body>
+</html>
