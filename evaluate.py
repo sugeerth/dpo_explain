@@ -41,12 +41,43 @@ def conditional_logprob(model, tokenizer, prompt: str, response: str, device) ->
     return float(-out.loss.item() * n_resp_tokens)
 
 
+def _response_n_tokens(tokenizer, prompt: str, response: str) -> int:
+    """Token count of the response alone, matching conditional_logprob's slicing."""
+    n_prompt = tokenizer(prompt, return_tensors="pt").input_ids.shape[1]
+    n_full = tokenizer(prompt + response, return_tensors="pt").input_ids.shape[1]
+    return max(n_full - n_prompt, 0)
+
+
+def _pearson(xs: list[float], ys: list[float]) -> float:
+    n = len(xs)
+    if n < 2:
+        return 0.0
+    mx, my = sum(xs) / n, sum(ys) / n
+    cov = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    vx = sum((x - mx) ** 2 for x in xs)
+    vy = sum((y - my) ** 2 for y in ys)
+    denom = (vx * vy) ** 0.5
+    return cov / denom if denom > 0 else 0.0
+
+
 def eval_preferences(base_model, dpo_model, tokenizer, dataset, device, n=200):
     """For each (prompt, chosen, rejected), compute the DPO implicit reward
     delta = beta * [log pi(y|x) - log pi_ref(y|x)] and report margin / accuracy.
     We drop the beta because we only need the sign of the difference.
+
+    We also report a length-controlled view. The HH "chosen" response is often
+    just longer, and summed log-probs are length-sensitive, so a naive margin can
+    be inflated by length alone. To check whether the signal survives:
+      * `margin_lengthdiff_corr` -- Pearson corr between the margin and
+        (len_chosen - len_rejected). Near 0 = margin is not explained by length.
+      * `length_matched_accuracy` -- preference accuracy restricted to pairs
+        whose response lengths are within `LEN_TOL` tokens of each other.
     """
-    margins, accs = [], []
+    LEN_TOL = 5
+    margins, accs, len_diffs = [], [], []
+    matched_accs = []
+    chosen_longer = 0
+
     for i, ex in enumerate(dataset.select(range(min(n, len(dataset))))):
         lp_c_dpo = conditional_logprob(dpo_model, tokenizer, ex["prompt"], ex["chosen"], device)
         lp_r_dpo = conditional_logprob(dpo_model, tokenizer, ex["prompt"], ex["rejected"], device)
@@ -59,6 +90,13 @@ def eval_preferences(base_model, dpo_model, tokenizer, dataset, device, n=200):
         margins.append(margin)
         accs.append(1.0 if margin > 0 else 0.0)
 
+        len_c = _response_n_tokens(tokenizer, ex["prompt"], ex["chosen"])
+        len_r = _response_n_tokens(tokenizer, ex["prompt"], ex["rejected"])
+        len_diffs.append(len_c - len_r)
+        chosen_longer += 1 if len_c > len_r else 0
+        if abs(len_c - len_r) <= LEN_TOL:
+            matched_accs.append(1.0 if margin > 0 else 0.0)
+
         if (i + 1) % 25 == 0:
             print(f"  [{i+1}/{n}] running margin mean={sum(margins)/len(margins):+.3f}  acc={sum(accs)/len(accs):.2%}")
 
@@ -66,6 +104,11 @@ def eval_preferences(base_model, dpo_model, tokenizer, dataset, device, n=200):
         "n": len(margins),
         "mean_margin": sum(margins) / len(margins),
         "preference_accuracy": sum(accs) / len(accs),
+        # Length controls
+        "frac_chosen_longer": chosen_longer / len(margins),
+        "margin_lengthdiff_corr": _pearson(margins, [float(d) for d in len_diffs]),
+        "length_matched_accuracy": (sum(matched_accs) / len(matched_accs)) if matched_accs else None,
+        "n_length_matched": len(matched_accs),
     }
 
 

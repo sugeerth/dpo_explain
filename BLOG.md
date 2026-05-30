@@ -28,6 +28,21 @@ In code, it is a binary classifier on `(prompt, chosen)` vs `(prompt, rejected)`
 with a particular parameterisation. That framing took me longer to internalise
 than it should have.
 
+To make sure I actually understood it and wasn't just trusting a library, I
+wrote the loss out by hand — `batch_logps` (per-token log-probs, the causal
+shift-by-one, mask the prompt, sum) and `dpo_loss` (the `logsigmoid` of the
+margin) — in [`dpo_loss.py`](https://github.com/sugeerth/dpo_explain/blob/main/dpo_loss.py),
+and a from-scratch training loop next to the TRL one. Writing it surfaced the
+fiddly parts you skim past in the paper: the loss needs the *summed* log-prob
+over completion tokens (so it's length-sensitive — see point 4); the prompt
+tokens must be masked out *after* the shift, not before; and TRL appends EOS to
+each response as text before tokenizing, so the model learns where to stop. I
+then tied the hand-written loss out against TRL numerically — same batch, same
+loss to ~3e-5 ([`test_dpo_loss.py`](https://github.com/sugeerth/dpo_explain/blob/main/test_dpo_loss.py)).
+A from-scratch loss that *disagrees* with the reference implementation is just a
+bug with good marketing; the tie-out is the part that makes "from scratch" mean
+something.
+
 ## Four things that surprised me
 
 **1. Both log-probs go down. The margin grows because rejected drops faster.**
@@ -61,21 +76,27 @@ pairs by hand. Maybe a third of them were genuine preference signal, a third
 were "both responses are fine, one is slightly more verbose," and a third were
 cases where I would have picked the *rejected* one. The model is averaging over
 all of this. A non-trivial fraction of what DPO is learning on HH is "be longer
-and more cautious," not "be more helpful." Length-controlled win rate (Park
-et al. 2024) is the right way to disentangle these; I haven't added it yet but
-it's the obvious next thing.
+and more cautious," not "be more helpful." Length-controlled evaluation (Park
+et al. 2024) is the right way to disentangle these, so `evaluate.py` now reports
+the correlation between the margin and the chosen−rejected length difference,
+plus accuracy restricted to length-matched pairs.
 
-## What I'd do next
+## What I did next (and what's still open)
 
-- **Length-controlled evaluation.** Otherwise I can't separate "preferred"
-  from "longer."
-- **Compare against SFT-on-chosen.** A surprising amount of DPO's improvement
-  on HH is recoverable by just supervised fine-tuning on the chosen responses.
-  If your DPO model doesn't beat SFT-on-chosen by a clear margin, the
-  preference signal isn't doing the work.
-- **Try IPO or SimPO.** Both address known DPO failure modes — IPO regularises
-  the implicit reward to prevent the chosen log-prob from collapsing, SimPO
-  drops the reference model entirely and adds a length norm.
+- **Length-controlled evaluation** — done. `evaluate.py` reports
+  `margin_lengthdiff_corr` and `length_matched_accuracy` so I can check whether
+  the preference signal survives once length is held roughly constant, instead
+  of taking the raw margin at face value.
+- **SFT-on-chosen baseline** — done (`train_sft.py`). A surprising amount of
+  DPO's improvement on HH is recoverable by just supervised fine-tuning on the
+  chosen responses; scoring both with the same `evaluate.py` is how you see
+  whether the preference signal is actually doing the work, or whether you
+  reinvented SFT with extra steps.
+- **IPO or SimPO** — still open. Both address known DPO failure modes — IPO
+  regularises the implicit reward to prevent the chosen log-prob from collapsing
+  (the asymmetry in point 1), SimPO drops the reference model entirely and adds
+  a length norm. `batch_logps(..., average_log_prob=True)` is already the
+  length-normalised log-prob those variants want, so it's a small next step.
 
 ## The takeaway
 

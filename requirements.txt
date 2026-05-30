@@ -1,6 +1,10 @@
 torch>=2.1.0
 transformers>=4.45.0
-trl>=0.11.0
+# trl>=0.20 — DPO internals were rewritten after 0.11 (get_batch_logps removed,
+# completion_mask replaces -100 label masking). The from-scratch tie-out in
+# test_dpo_loss.py / verify_against_trl.py targets that newer path; developed and
+# verified against trl==0.29.0.
+trl>=0.20.0
 peft>=0.13.0
 datasets>=3.0.0
 accelerate>=0.34.0
@@ -8,3 +12,4 @@ bitsandbytes>=0.43.0; platform_system != "Darwin"
 wandb
 matplotlib
 numpy
+pytest>=7.0.0  # for test_dpo_loss.py
