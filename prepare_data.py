@@ -14,6 +14,13 @@ from datasets import load_dataset
 
 HH_TURN_RE = re.compile(r"\n\n(Human|Assistant): ")
 
+# Length bounds (in characters) for the `keep` filter. Upper bounds drop
+# pathologically long examples that would waste a batch slot on truncation;
+# the lower bound drops degenerate near-empty responses that teach nothing.
+MAX_PROMPT_CHARS = 4000
+MAX_RESPONSE_CHARS = 2000
+MIN_RESPONSE_CHARS = 5
+
 
 def split_prompt_response(text: str) -> tuple[str, str]:
     idx = text.rfind("\n\nAssistant: ")
@@ -69,11 +76,11 @@ def build(model_name: str, n_train: int, n_eval: int, out_dir: str) -> None:
     # Drop pathologically long examples so we don't waste a batch slot truncating.
     def keep(example):
         return (
-            len(example["prompt"]) < 4000
-            and len(example["chosen"]) < 2000
-            and len(example["rejected"]) < 2000
-            and len(example["chosen"]) > 5
-            and len(example["rejected"]) > 5
+            len(example["prompt"]) < MAX_PROMPT_CHARS
+            and len(example["chosen"]) < MAX_RESPONSE_CHARS
+            and len(example["rejected"]) < MAX_RESPONSE_CHARS
+            and len(example["chosen"]) > MIN_RESPONSE_CHARS
+            and len(example["rejected"]) > MIN_RESPONSE_CHARS
         )
 
     train = train.filter(keep)
