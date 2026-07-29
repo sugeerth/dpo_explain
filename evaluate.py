@@ -1,17 +1,13 @@
 """Measure what DPO actually changed.
 
-Two complementary metrics:
+On the HH test split, compare pi_theta against pi_ref on held-out preferences:
+how often does pi_theta assign higher log-prob to the chosen response than to
+the rejected one, relative to pi_ref? This is the metric DPO directly optimises;
+if it doesn't go up, training didn't work.
 
-1. **Reward margin on held-out preferences** -- on the HH test split, how often
-   does pi_theta assign higher log-prob to the chosen response than to the
-   rejected one, relative to pi_ref? This is the metric DPO directly optimises;
-   if it doesn't go up, training didn't work.
-
-2. **GPT-judge head-to-head** (optional) -- generate from both models on a fixed
-   set of prompts, ask an external judge to pick a winner. Approximates "did
-   anyone actually prefer the new model?"
-
-We always run (1). (2) is gated on having an Anthropic/OpenAI key set.
+Because HH "chosen" responses are often just longer, the script also reports
+length controls -- the chosen-longer fraction, the margin/length-diff
+correlation, and a length-matched accuracy (Park et al. 2024).
 """
 
 import argparse
